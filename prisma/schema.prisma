@@ -1,0 +1,633 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationType {
+  SUAPE
+  SUPPLIER
+  EXTERNAL_INSPECTION
+  CONSULTING
+  AUDIT
+  OTHER
+}
+
+enum UserRole {
+  SYSTEM_ADMIN
+  SUAPE_INSPECTOR
+  EXTERNAL_INSPECTOR
+  SUPPLIER
+  AUDITOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  INACTIVE
+}
+
+model Organization {
+  id               String           @id @default(uuid())
+  name             String
+  legalName        String
+  tradeName        String
+  cnpj             String           @unique
+  organizationType OrganizationType
+
+  institutionalEmail String
+  institutionalPhone String
+
+  cep        String
+  state      String
+  city       String
+  district   String
+  street     String
+  number     String
+  complement String?
+
+  legalResponsibleName  String
+  legalResponsibleCpf   String
+  legalResponsibleEmail String
+  legalResponsiblePhone String
+
+  notes String?
+
+  users User[]
+  rdos  Rdo[]
+  works Work[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cnpj])
+  @@map("organizations")
+}
+
+model User {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name         String
+  cpf          String? @unique
+  email        String  @unique
+  phone        String
+  passwordHash String?
+
+  role   UserRole
+  status UserStatus @default(ACTIVE)
+
+  userPermissions UserPermission[]
+
+  rdosAuthored          Rdo[]              @relation("RdoAuthor")
+  rdoEvidencesUploaded  RdoEvidence[]      @relation("RdoEvidenceUploadedBy")
+  rdoEvidencesValidated RdoEvidence[]      @relation("RdoEvidenceValidatedBy")
+  rdoReviews            RdoReview[]
+  rdoStatusChanges      RdoStatusHistory[]
+  rdoComments           RdoComment[]
+
+  worksAsSuapeInspector    Work[]           @relation("WorkSuapeInspector")
+  worksAsExternalInspector Work[]           @relation("WorkExternalInspector")
+  worksAsContractManager   Work[]           @relation("WorkContractManager")
+  workUserLinks            WorkUser[]
+  workPermissions          WorkPermission[]
+  workDocumentsUploaded    WorkDocument[]
+  workAdditivesCreated     WorkAdditive[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  key         String  @unique
+  feature     String
+  action      String
+  description String?
+
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+  workPermissions WorkPermission[]
+
+  createdAt DateTime @default(now())
+
+  @@index([feature])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         UserRole
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  granted      Boolean    @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@map("user_permissions")
+}
+
+// ───────────────────────────── RDO (Relatório Diário de Obra) ─────────────────────────────
+
+enum RdoStatus {
+  DRAFT
+  SENT_TO_REVIEW
+  UNDER_EXTERNAL_REVIEW
+  EXTERNAL_APPROVED
+  REJECTED_BY_EXTERNAL
+  UNDER_SUAPE_REVIEW
+  APPROVED
+  REJECTED_BY_SUAPE
+  SIGNATURE_PENDING
+  SIGNED
+  REOPENED
+  CANCELED
+}
+
+enum RdoShift {
+  MORNING
+  AFTERNOON
+  NIGHT
+}
+
+enum RdoActivityStatus {
+  IN_PROGRESS
+  STOPPED
+  COMPLETED
+}
+
+enum RdoEquipmentStatus {
+  IN_OPERATION
+  IDLE
+  MAINTENANCE
+}
+
+enum WeatherCondition {
+  SUNNY
+  RAINY
+  CLOUDY
+}
+
+enum GroundStatus {
+  DRY
+  WET
+  MUDDY
+}
+
+enum RdoOccurrenceType {
+  SAFETY
+  OPERATIONAL
+  ENVIRONMENTAL
+  QUALITY
+  OTHER
+}
+
+enum RdoSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RdoNonConformityStatus {
+  OPEN
+  IN_ANALYSIS
+  RESOLVED
+}
+
+enum RdoEvidenceType {
+  PHOTO
+  VIDEO
+  FILE
+}
+
+enum RdoEvidenceUploadStatus {
+  PENDING
+  UPLOADING
+  UPLOADED
+  FAILED
+}
+
+enum RdoEvidenceValidationStatus {
+  PENDING
+  VALIDATED
+  REJECTED
+}
+
+enum RdoReviewStage {
+  EXTERNAL
+  SUAPE
+}
+
+enum RdoReviewDecision {
+  APPROVED
+  REJECTED
+}
+
+model Rdo {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  number         Int
+
+  workId String
+  work   Work   @relation(fields: [workId], references: [id])
+
+  // Snapshot imutável tirado da obra no momento da criação do RDO — preserva o
+  // histórico mesmo que a obra seja editada depois.
+  workLabel                 String?
+  contractLabel             String?
+  contractObjectSnapshot    String?
+  contractedCompanySnapshot String?
+  suapeInspectorSnapshot    String?
+  externalInspectorSnapshot String?
+
+  authorId String
+  author   User   @relation("RdoAuthor", fields: [authorId], references: [id])
+
+  date                 DateTime
+  shift                RdoShift
+  siteEngineerName     String
+  siteEngineerRegistry String?
+  foremanName          String?
+  notes                String?
+
+  status      RdoStatus @default(DRAFT)
+  submittedAt DateTime?
+
+  activities      RdoActivity[]
+  teams           RdoTeam[]
+  equipments      RdoEquipment[]
+  weather         RdoWeather?
+  occurrences     RdoOccurrence[]
+  nonConformities RdoNonConformity[]
+  evidences       RdoEvidence[]
+  reviews         RdoReview[]
+  statusHistory   RdoStatusHistory[]
+  comments        RdoComment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, number])
+  @@index([organizationId])
+  @@index([status])
+  @@index([authorId])
+  @@index([workId])
+  @@map("rdos")
+}
+
+model RdoActivity {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  category         String
+  description      String
+  status           RdoActivityStatus @default(IN_PROGRESS)
+  aiSuggestionUsed Boolean           @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rdoId])
+  @@map("rdo_activities")
+}
+
+model RdoTeam {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  name      String
+  function  String
+  quantity  Int
+  startTime String?
+  endTime   String?
+  company   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rdoId])
+  @@map("rdo_teams")
+}
+
+model RdoEquipment {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  name       String
+  identifier String?
+  quantity   Int                @default(1)
+  operator   String?
+  hours      Float?             @default(0)
+  status     RdoEquipmentStatus @default(IDLE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rdoId])
+  @@map("rdo_equipments")
+}
+
+model RdoWeather {
+  id    String @id @default(uuid())
+  rdoId String @unique
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  morningCondition   WeatherCondition?
+  afternoonCondition WeatherCondition?
+  nightCondition     WeatherCondition?
+  minTemperature     Float?
+  maxTemperature     Float?
+  groundStatus       GroundStatus      @default(DRY)
+  hadStoppage        Boolean           @default(false)
+  stoppageReason     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("rdo_weather")
+}
+
+model RdoOccurrence {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  type        RdoOccurrenceType
+  location    String
+  severity    RdoSeverity
+  summary     String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rdoId])
+  @@map("rdo_occurrences")
+}
+
+model RdoNonConformity {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  code        String
+  title       String
+  description String
+  severity    RdoSeverity
+  status      RdoNonConformityStatus @default(OPEN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rdoId])
+  @@map("rdo_non_conformities")
+}
+
+model RdoEvidence {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  type        RdoEvidenceType
+  fileName    String
+  storagePath String
+  mimeType    String?
+  sizeBytes   Int?
+  caption     String?
+
+  latitude       Float?
+  longitude      Float?
+  accuracyMeters Float?
+  altitudeMeters Float?
+  capturedAt     DateTime?
+
+  uploadedById String
+  uploadedBy   User   @relation("RdoEvidenceUploadedBy", fields: [uploadedById], references: [id])
+
+  uploadStatus     RdoEvidenceUploadStatus     @default(UPLOADED)
+  validationStatus RdoEvidenceValidationStatus @default(PENDING)
+  validatedById    String?
+  validatedBy      User?                       @relation("RdoEvidenceValidatedBy", fields: [validatedById], references: [id])
+  validatedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([rdoId])
+  @@map("rdo_evidences")
+}
+
+model RdoReview {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  stage    RdoReviewStage
+  decision RdoReviewDecision
+  comments String?
+
+  reviewerId String
+  reviewer   User   @relation(fields: [reviewerId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([rdoId])
+  @@map("rdo_reviews")
+}
+
+model RdoStatusHistory {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  fromStatus RdoStatus?
+  toStatus   RdoStatus
+  reason     String?
+
+  changedById String
+  changedBy   User   @relation(fields: [changedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([rdoId])
+  @@map("rdo_status_history")
+}
+
+model RdoComment {
+  id    String @id @default(uuid())
+  rdoId String
+  rdo   Rdo    @relation(fields: [rdoId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  body     String
+
+  createdAt DateTime @default(now())
+
+  @@index([rdoId])
+  @@map("rdo_comments")
+}
+
+// ───────────────────────────── Obras / Contratos (Work) ─────────────────────────────
+
+enum WorkStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELED
+  EXPIRED
+}
+
+model Work {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name           String
+  contractNumber String?
+  contractObject String?
+  description    String?
+  contractType   String?
+  status         WorkStatus @default(DRAFT)
+  location       String?
+
+  contractedCompanyName             String
+  contractedCompanyCnpj             String
+  contractedCompanyResponsibleName  String
+  contractedCompanyResponsibleEmail String?
+  contractedCompanyResponsiblePhone String?
+
+  suapeInspectorId String
+  suapeInspector   User   @relation("WorkSuapeInspector", fields: [suapeInspectorId], references: [id])
+
+  externalInspectorId String?
+  externalInspector   User?   @relation("WorkExternalInspector", fields: [externalInspectorId], references: [id])
+
+  contractManagerId String?
+  contractManager   User?   @relation("WorkContractManager", fields: [contractManagerId], references: [id])
+
+  contractStartDate      DateTime
+  contractEndDate        DateTime
+  executionStartDate     DateTime?
+  expectedCompletionDate DateTime?
+  durationDays           Int?
+
+  notes String?
+
+  users       WorkUser[]
+  permissions WorkPermission[]
+  documents   WorkDocument[]
+  additives   WorkAdditive[]
+  rdos        Rdo[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("works")
+}
+
+model WorkUser {
+  id     String @id @default(uuid())
+  workId String
+  work   Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role UserRole
+
+  createdAt DateTime @default(now())
+
+  @@unique([workId, userId])
+  @@index([workId])
+  @@index([userId])
+  @@map("work_users")
+}
+
+model WorkPermission {
+  id           String     @id @default(uuid())
+  workId       String
+  work         Work       @relation(fields: [workId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  granted      Boolean    @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@unique([workId, userId, permissionId])
+  @@index([workId])
+  @@index([userId])
+  @@map("work_permissions")
+}
+
+model WorkDocument {
+  id     String @id @default(uuid())
+  workId String
+  work   Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  title       String
+  type        String
+  fileName    String
+  storagePath String
+  mimeType    String?
+  sizeBytes   Int?
+
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([workId])
+  @@map("work_documents")
+}
+
+model WorkAdditive {
+  id     String @id @default(uuid())
+  workId String
+  work   Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  description String
+  type        String
+  newEndDate  DateTime?
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([workId])
+  @@map("work_additives")
+}

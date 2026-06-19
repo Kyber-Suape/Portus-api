@@ -1,0 +1,23 @@
+# Aplicado automaticamente pelo Docker Compose em `docker compose up` (sem `-f`).
+# Não é necessário (nem recomendado) copiar este arquivo para a VPS — lá, o
+# `docker-compose.yml` sozinho já sobe a stack de produção.
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+
+  api:
+    build:
+      target: dev
+    environment:
+      - DATABASE_URL=postgresql://portus:portus@postgres:5432/portus_dev?schema=public
+    volumes:
+      - .:/app
+      - /app/node_modules
+      # src/config/env.ts recarrega `.env` do disco com override:true (necessário para NODE_ENV=test
+      # escolher .env.test) — isso pisa no DATABASE_URL injetado acima. Sobrepõe o `.env` do host
+      # (apontado para localhost, usado pelo `npm run dev` fora do Docker) com uma versão que aponta
+      # para o serviço `postgres` da rede do compose.
+      - ./.env.docker:/app/.env:ro

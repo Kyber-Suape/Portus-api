@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+uploads
+uploads-test
+.git
+.env
+.env.test
+.env.docker
+*.log
+npm-debug.log*
