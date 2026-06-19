@@ -1,11 +1,11 @@
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
-// `override: true` é necessário porque `@prisma/client` carrega seu próprio `.env`
-// (sempre o arquivo `.env`, nunca `.env.test`) como efeito colateral ao ser importado —
-// se isso acontecer antes desta linha, DATABASE_URL ficaria "presa" no valor de
-// desenvolvimento mesmo em NODE_ENV=test, já que o dotenv não sobrescreve por padrão.
-loadDotenv({ path: process.env.NODE_ENV === "test" ? ".env.test" : ".env", override: true });
+// Único arquivo de configuração: `.env`. Não usa `override`, de propósito — em testes
+// (vitest `test.env`, ver vitest.config.ts) e em Docker (`environment:` do compose), as
+// variáveis já chegam definidas no processo *antes* deste require, e o dotenv (por padrão)
+// nunca sobrescreve uma variável que já existe em `process.env`.
+loadDotenv();
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),

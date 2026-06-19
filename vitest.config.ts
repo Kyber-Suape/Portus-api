@@ -5,6 +5,16 @@ export default defineConfig({
     environment: "node",
     include: ["tests/**/*.spec.ts"],
     globalSetup: ["./tests/global-setup.ts"],
+    // Configuração do banco/segredos de teste fica só aqui — não há mais um arquivo `.env.test`.
+    // `env.ts` carrega `.env` sem `override`, então essas variáveis (já definidas no processo
+    // antes do require) sempre vencem o `.env` de desenvolvimento.
+    env: {
+      DATABASE_URL: "postgresql://portus:portus@localhost:5432/portus_test?schema=public",
+      TEST_DATABASE_URL: "postgresql://portus:portus@localhost:5432/portus_test?schema=public",
+      JWT_SECRET: "test-secret",
+      JWT_EXPIRES_IN: "1h",
+      UPLOADS_DIR: "uploads-test",
+    },
     hookTimeout: 30000,
     testTimeout: 30000,
     // Os testes de integração compartilham um único banco Postgres de teste (sem isolamento

@@ -8,7 +8,8 @@ import { seedPermissionsCatalog } from "../prisma/permissions-catalog";
  * referência que `resetDatabase()` (por design) nunca apaga entre os testes.
  *
  * Importa `src/config/database` (não cria um `PrismaClient` à parte) para garantir que
- * o `.env.test` já tenha sido carregado (com override) antes de qualquer conexão.
+ * a configuração de teste (`test.env` em vitest.config.ts) já tenha sido aplicada antes
+ * de qualquer conexão.
  */
 export default async function setup(): Promise<void> {
   if (env.NODE_ENV !== "test") {

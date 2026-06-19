@@ -12,12 +12,10 @@ services:
     build:
       target: dev
     environment:
+      # `env.ts` carrega `.env` sem `override`, então esta variável (já definida no processo
+      # antes do require) vence o `.env` do host (que aponta para "localhost", usado pelo
+      # `npm run dev` fora do Docker) mesmo com `.env` sendo montado junto via bind mount.
       - DATABASE_URL=postgresql://portus:portus@postgres:5432/portus_dev?schema=public
     volumes:
       - .:/app
       - /app/node_modules
-      # src/config/env.ts recarrega `.env` do disco com override:true (necessário para NODE_ENV=test
-      # escolher .env.test) — isso pisa no DATABASE_URL injetado acima. Sobrepõe o `.env` do host
-      # (apontado para localhost, usado pelo `npm run dev` fora do Docker) com uma versão que aponta
-      # para o serviço `postgres` da rede do compose.
-      - ./.env.docker:/app/.env:ro

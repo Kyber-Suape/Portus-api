@@ -4,7 +4,7 @@ import { env } from "../../src/config/env";
 function assertRunningAgainstTestDatabase() {
   if (env.NODE_ENV !== "test") {
     throw new Error(
-      "Recusando limpar o banco: NODE_ENV não é 'test'. Use .env.test ao rodar a suíte de testes.",
+      "Recusando limpar o banco: NODE_ENV não é 'test'. Rode via `npm test` (vitest aplica a config de teste automaticamente).",
     );
   }
 
